@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CombatGame Asset Workshop</title>
+    <link rel="stylesheet" href="/src/viewer/style.css" />
+  </head>
+  <body>
+    <aside id="panel">
+      <h1>CombatGame Assets</h1>
+      <div id="asset-list"></div>
+      <section id="character-tools" hidden>
+        <h2>Animation</h2>
+        <div id="anim-buttons" class="row"></div>
+        <h2>Equip weapon</h2>
+        <select id="equip"></select>
+      </section>
+      <section>
+        <h2>Export</h2>
+        <button id="download">Download .glb</button>
+        <p id="stats"></p>
+      </section>
+    </aside>
+    <main id="stage"></main>
+    <script type="module" src="/src/viewer/main.js"></script>
+  </body>
+</html>
