@@ -1,7 +1,11 @@
-# CombatGame: 3D Asset Workshop
+# CombatGame
 
-Three.js workshop that builds the 3D assets for CombatGame, a battle-royale
-style game, and exports them as `.glb` (binary glTF) files for the Flutter game.
+A battle-royale style 3D shooter in two parts:
+
+- **[`game/`](game/)**: the playable Flutter game, built with flutter_scene.
+  See [game/README.md](game/README.md) for how to run it and the controls.
+- **This folder**: a Three.js workshop that builds the game's 3D assets and
+  exports them as `.glb` (binary glTF) files into `game/assets/models/`.
 
 All assets are generated in code: no image textures and no external model
 files. Every build produces the same output.
@@ -10,7 +14,7 @@ files. Every build produces the same output.
 
 | File | What it is |
 | --- | --- |
-| `soldier.glb` | ~1.80 m soldier with tactical vest, pouches, belt and holster, knee pads, boots and gloves. Rigged as a joint hierarchy with Mixamo-style names (`Hips`, `Spine`, `Chest`, `Neck`, `Head`, `LeftArm`, `RightForeArm`, `LeftUpLeg`...). Includes 4 animations: `Idle`, `Walk`, `Run`, `Aim`. |
+| `soldier.glb` | ~1.80 m soldier with tactical vest, pouches, belt and holster, knee pads, boots and gloves. Rigged as a joint hierarchy with Mixamo-style names (`Hips`, `Spine`, `Chest`, `Neck`, `Head`, `LeftArm`, `RightForeArm`, `LeftUpLeg`...). Includes 6 animations: `Idle`, `Walk`, `Run`, `Aim`, plus `WalkAim` and `RunAim` (legs moving, gun held up). |
 | `pistol.glb` | Semi-auto pistol |
 | `assault_rifle.glb` | M4-style rifle with red dot, rail, curved magazine and fore grip |
 | `shotgun.glb` | Pump-action shotgun with wooden furniture |
@@ -19,7 +23,9 @@ files. Every build produces the same output.
 | `grenade.glb` | Frag grenade |
 | `training_island.glb` | 240 m × 240 m island map: terrain, sea, road, a town of 6 enterable houses (some two-storey with stairs), a warehouse, a watchtower on a hill, ~220 trees, rocks, crates, sandbag walls, an airdrop crate and 8 spawn points |
 
-Prebuilt files are in [`exports/`](exports/).
+Prebuilt files are in [`game/assets/models/`](game/assets/models/). The map
+also gets `training_island.collision.json`, the gameplay collision data the
+game uses (terrain heightfield, wall/floor boxes, tree and rock circles).
 
 ### Conventions (for the game code)
 
@@ -40,7 +46,7 @@ Prebuilt files are in [`exports/`](exports/).
 ```bash
 npm install
 npm run dev        # open the viewer at http://localhost:5173
-npm run export     # rebuild every .glb into exports/
+npm run export     # rebuild every .glb into game/assets/models/
 npm run export -- soldier machine_gun   # rebuild only some assets
 ```
 
@@ -63,18 +69,12 @@ src/assets/weapons.js     all weapons (GunBuilder helper)
 src/assets/map.js         island map, getHeight(x, z) for ground height
 src/assets/index.js       asset registry (keys = export file names)
 src/viewer/               browser viewer
-scripts/export-glb.mjs    Node exporter -> exports/*.glb
+scripts/export-glb.mjs    Node exporter -> game/assets/models/*.glb
 ```
 
 ## Using the assets in Flutter
 
-The `.glb` files are standard glTF 2.0 and pass the Khronos glTF validator
-with no errors. Some options on the Flutter side:
-
-- [`flutter_scene`](https://pub.dev/packages/flutter_scene): a real-time 3D
-  renderer for Flutter (Impeller) that imports glTF and plays animations. It
-  is the best fit for a game.
-- [`flutter_3d_controller`](https://pub.dev/packages/flutter_3d_controller) or
-  [`model_viewer_plus`](https://pub.dev/packages/model_viewer_plus): good for
-  showing models, for example in a character or weapon select screen. They
-  are not meant for running gameplay.
+The game in [`game/`](game/) loads these files with flutter_scene. Its build
+hook converts each `.glb` at build time, so after `npm run export` just
+rebuild the game. The files are standard glTF 2.0 and pass the Khronos glTF
+validator with no errors.

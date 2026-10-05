@@ -108,12 +108,23 @@ class Batcher {
 
 // Merges all meshes under a building/prop group into one mesh per material,
 // keeping the group (name, transform, userData) so the game can still find it.
+// Small or walk-through parts that should not block the player.
+const NO_COLLIDE = /^(Door|Rung|LadderSide|Brace|Edge|Band|Sill|Flare|Rib|Gable)/;
+
 function flatten(group) {
   group.updateMatrixWorld(true);
   const inverse = group.matrixWorld.clone().invert();
   const batch = new Batcher();
+  // Box colliders in the group's local space, read later by collectColliders().
+  group.colliderBoxes = group.colliderBoxes ?? [];
   group.traverse((o) => {
-    if (o.isMesh) batch.push(o.material, o.geometry, inverse.clone().multiply(o.matrixWorld));
+    if (!o.isMesh) return;
+    const local = inverse.clone().multiply(o.matrixWorld);
+    batch.push(o.material, o.geometry, local);
+    if (o.geometry.type === 'BoxGeometry' && !NO_COLLIDE.test(o.name)) {
+      const { width, height, depth } = o.geometry.parameters;
+      group.colliderBoxes.push({ matrix: local, size: [width, height, depth] });
+    }
   });
   const merged = batch.build(group.name);
   group.clear();
@@ -424,6 +435,7 @@ function sandbagWall(mats, name, length = 4) {
   const m = shadowed(new THREE.Mesh(mergeGeometries(geos), mats.sandbag));
   m.name = 'Bags';
   g.add(m);
+  g.colliderBoxes = [{ matrix: new THREE.Matrix4().makeTranslation(0, 0.35, 0), size: [length - 0.2, 0.7, 0.4] }];
   g.userData = { type: 'cover' };
   return g;
 }
@@ -441,7 +453,11 @@ function airdrop(mats) {
   return g;
 }
 
+// Trunks and rocks block movement as vertical cylinders: [x, z, radius].
+let circleColliders = [];
+
 function deciduousTree(batch, mats, x, y, z, s, rnd) {
+  circleColliders.push([x, z, 0.3 * s]);
   const trunk = new THREE.CylinderGeometry(0.18, 0.3, 4, 7);
   trunk.translate(0, 2, 0);
   batch.push(mats.bark, trunk, tmpMatrix(x, y, z, rnd() * 6, s));
@@ -454,6 +470,7 @@ function deciduousTree(batch, mats, x, y, z, s, rnd) {
 }
 
 function pineTree(batch, mats, x, y, z, s, rnd) {
+  circleColliders.push([x, z, 0.25 * s]);
   const trunk = new THREE.CylinderGeometry(0.12, 0.25, 3, 6);
   trunk.translate(0, 1.5, 0);
   batch.push(mats.bark, trunk, tmpMatrix(x, y, z, 0, s));
@@ -483,6 +500,7 @@ function rockGeometry(rnd) {
 
 export function createMap(mats) {
   const rnd = mulberry32(42);
+  circleColliders = [];
   const map = named(new THREE.Group(), 'TrainingIsland');
   map.add(buildTerrain(mats));
   map.add(buildWater(mats));
@@ -549,6 +567,7 @@ export function createMap(mats) {
     if (y < 0.3 || Math.hypot(x - TOWN.x, z - TOWN.z) < TOWN.radius - 4 || Math.abs(z - ROAD_Z) < 5) continue;
     const s = 0.5 + rnd() * 1.8;
     nature.push(mats.rock, rocks[i % rocks.length], tmpMatrix(x, y + s * 0.15, z, rnd() * 6, s));
+    if (s > 0.9) circleColliders.push([x, z, s * 0.8]);
   }
   map.add(nature.build('Nature'));
 
@@ -562,5 +581,51 @@ export function createMap(mats) {
   map.add(spawns);
 
   map.userData = { size: MAP_SIZE, seaLevel: SEA_LEVEL };
+  map.collision = collectCollision(map);
   return map;
+}
+
+// ---------------------------------------------------------------- collision
+
+const round = (v) => Math.round(v * 1000) / 1000;
+
+// Gameplay collision data, in the same (glTF) coordinates as the map:
+// - heightfield: terrain vertex heights on a regular grid, row by row from
+//   z = -size/2, column by column from x = -size/2. Triangles split along the
+//   (x0, z1)-(x1, z0) diagonal, exactly like the rendered terrain mesh.
+// - boxes: oriented boxes { c: center, h: half extents, yaw } for walls,
+//   floors, stairs and cover. Box tops act as floors, so stairs and upper
+//   storeys are walkable.
+// - circles: [x, z, radius] for tree trunks and big rocks.
+function collectCollision(map) {
+  map.updateMatrixWorld(true);
+  const terrain = map.getObjectByName('Terrain');
+  const pos = terrain.geometry.attributes.position;
+  const heights = new Array(pos.count);
+  for (let i = 0; i < pos.count; i++) heights[i] = round(pos.getY(i));
+
+  const boxes = [];
+  const p = new THREE.Vector3(), q = new THREE.Quaternion(), sc = new THREE.Vector3();
+  const e = new THREE.Euler();
+  map.traverse((o) => {
+    if (!o.colliderBoxes) return;
+    for (const { matrix, size } of o.colliderBoxes) {
+      new THREE.Matrix4().multiplyMatrices(o.matrixWorld, matrix).decompose(p, q, sc);
+      e.setFromQuaternion(q, 'YXZ');
+      boxes.push({
+        c: [round(p.x), round(p.y), round(p.z)],
+        h: [round(size[0] * sc.x / 2), round(size[1] * sc.y / 2), round(size[2] * sc.z / 2)],
+        yaw: round(e.y),
+      });
+    }
+  });
+
+  const segments = Math.round(Math.sqrt(pos.count)) - 1;
+  return {
+    size: MAP_SIZE,
+    seaLevel: SEA_LEVEL,
+    heightfield: { segments, heights },
+    boxes,
+    circles: circleColliders.map((c) => c.map(round)),
+  };
 }

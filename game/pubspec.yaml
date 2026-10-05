@@ -1,0 +1,25 @@
+name: combat_game
+description: "CombatGame: a third-person 3D shooter built with flutter_scene."
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.13.5
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_scene: ^0.23.0
+  hooks: ^2.2.0
+  vector_math: ^2.4.3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  assets:
+    - flutter_scene_generated/
+    - assets/models/training_island.collision.json
+  uses-material-design: true

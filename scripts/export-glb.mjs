@@ -1,4 +1,4 @@
-// Builds every asset in Node and writes binary glTF files to exports/.
+// Builds every asset in Node and writes binary glTF files to game/assets/models/.
 // Usage: npm run export            (all assets)
 //        npm run export -- soldier (only the named ones)
 import { mkdir, writeFile } from 'node:fs/promises';
@@ -18,7 +18,9 @@ globalThis.FileReader ??= class {
   }
 };
 
-const outDir = new URL('../exports/', import.meta.url);
+// Written straight into the Flutter game's assets, where its build hook
+// converts each .glb to the engine's fast-loading format.
+const outDir = new URL('../game/assets/models/', import.meta.url);
 await mkdir(outDir, { recursive: true });
 
 const wanted = process.argv.slice(2);
@@ -44,5 +46,9 @@ for (const key of keys) {
     const g = o.geometry;
     triangles += (g.index ? g.index.count : g.attributes.position.count) / 3;
   });
+  if (object.collision) {
+    // Gameplay collision data for the game (heightfield + colliders).
+    await writeFile(new URL(`${key}.collision.json`, outDir), JSON.stringify(object.collision));
+  }
   console.log(`${key.padEnd(16)} ${(glb.byteLength / 1024).toFixed(0).padStart(6)} KB  ${String(meshes).padStart(4)} meshes  ${Math.round(triangles).toString().padStart(7)} tris  ${(object.animations ?? []).length} anims`);
 }

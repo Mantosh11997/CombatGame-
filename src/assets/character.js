@@ -376,7 +376,18 @@ export function createCharacterAnimations() {
     hold('Chest', [3, 0, 0], [4, 0, 0]),
     hold('Head', [4, 0, 0], [4, 0, 0]),
   ]);
-  return [idle, walk, run, aim];
+  // Move while holding a gun: legs and hips from the locomotion clip, arms,
+  // chest and head from Aim (resampled to the locomotion clip's length).
+  const AIM_NODES = /^(LeftArm|RightArm|LeftForeArm|RightForeArm|Chest|Head)\./;
+  const withAim = (name, base) => new THREE.AnimationClip(name, base.duration, [
+    ...base.tracks.filter((t) => !AIM_NODES.test(t.name)),
+    ...aim.tracks.map((t) => {
+      const track = t.clone();
+      track.times = track.times.map((time) => (time / aim.duration) * base.duration);
+      return track;
+    }),
+  ]);
+  return [idle, walk, run, aim, withAim('WalkAim', walk), withAim('RunAim', run)];
 }
 
 export function createCharacter(mats) {
