@@ -26,6 +26,33 @@ flutter run -d chrome              # web
 Flutter GPU is already switched on for Android (`AndroidManifest.xml`) and
 iOS (`Info.plist`), so release builds need no flag. The web needs nothing.
 
+## Get the APK from GitHub
+
+The workflow `.github/workflows/build-apk.yml` builds a release APK on every
+push that touches `game/`, on pull requests, and on demand (Actions tab →
+**Build Android APK** → **Run workflow**). It runs the analyzer and tests
+first.
+
+- **Download:** open the workflow run and download the `combat-game-apk`
+  artifact (a zip containing the `.apk`). Copy it to your phone and install
+  it; Android will ask you to allow installs from that source.
+- **Releases:** push a tag like `v0.1.0` (`git tag v0.1.0 && git push origin
+  v0.1.0`) and the APK is also attached to a GitHub Release.
+- **Signing:** without setup, each build is signed with a throwaway debug
+  key, so Android won't install a new build over an old one; uninstall
+  first. To sign every build with the same key, create a keystore once:
+
+  ```bash
+  keytool -genkey -v -keystore upload-keystore.jks -keyalg RSA -keysize 2048 \
+    -validity 10000 -alias upload
+  base64 -w 0 upload-keystore.jks   # copy the output
+  ```
+
+  Then add four repository secrets (Settings → Secrets and variables →
+  Actions): `ANDROID_KEYSTORE_BASE64` (that output),
+  `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` (`upload`) and
+  `ANDROID_KEY_PASSWORD`. Keep the `.jks` file safe and never commit it.
+
 ## Controls
 
 | Action | Touch | Keyboard / mouse |
