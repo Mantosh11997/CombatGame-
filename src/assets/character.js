@@ -8,6 +8,16 @@ import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.j
 
 const deg = THREE.MathUtils.degToRad;
 
+// Low detail (for the 49 bots): the same body with far fewer segments.
+// Set only while createCharacter builds a low-detail model.
+let LOW = false;
+const lo = (n, min) => (LOW ? Math.max(min, Math.round(n / 3)) : n);
+const RBox = (w, h, d, seg, r) => new RoundedBoxGeometry(w, h, d, LOW ? 1 : seg, r);
+const Sphere = (r, ws, hs, ...rest) => new THREE.SphereGeometry(r, lo(ws, 8), lo(hs, 6), ...rest);
+const Capsule = (r, len, cap, radial) => new THREE.CapsuleGeometry(r, len, LOW ? 1 : cap, lo(radial, 6));
+const Torus = (r, tube, radial, tubular) => new THREE.TorusGeometry(r, tube, lo(radial, 4), lo(tubular, 8));
+const Cylinder = (rt, rb, h, radial, ...rest) => new THREE.CylinderGeometry(rt, rb, h, lo(radial, 5), ...rest);
+
 function mesh(name, geometry, material, castShadow = true) {
   const m = new THREE.Mesh(geometry, material);
   m.name = name;
@@ -26,6 +36,7 @@ function joint(name, x, y, z) {
 // Smooth, muscle-shaped limb segment hanging down -Y from its joint.
 // radii: list of radius values sampled evenly from top (joint) to bottom.
 function limbGeometry(length, radii, depthScale = 1, radial = 24) {
+  radial = lo(radial, 8);
   const pts = [];
   pts.push(new THREE.Vector2(0.0001, 0));
   radii.forEach((r, i) => {
@@ -34,7 +45,7 @@ function limbGeometry(length, radii, depthScale = 1, radial = 24) {
   });
   pts.push(new THREE.Vector2(0.0001, -length));
   const curve = new THREE.SplineCurve(pts.slice(1, -1));
-  const smooth = [pts[0], ...curve.getPoints(radii.length * 4), pts[pts.length - 1]];
+  const smooth = [pts[0], ...curve.getPoints(radii.length * (LOW ? 1 : 4)), pts[pts.length - 1]];
   const geo = new THREE.LatheGeometry(smooth, radial);
   geo.scale(1, 1, depthScale);
   return geo;
@@ -44,16 +55,16 @@ function limbGeometry(length, radii, depthScale = 1, radial = 24) {
 function torsoGeometry(height, radii, depthScale) {
   const pts = radii.map((r, i) => new THREE.Vector2(r, (i / (radii.length - 1)) * height));
   const curve = new THREE.SplineCurve(pts);
-  const smooth = curve.getPoints(radii.length * 5);
+  const smooth = curve.getPoints(radii.length * (LOW ? 2 : 5));
   smooth.unshift(new THREE.Vector2(0.0001, 0));
   smooth.push(new THREE.Vector2(0.0001, height));
-  const geo = new THREE.LatheGeometry(smooth, 32);
+  const geo = new THREE.LatheGeometry(smooth, lo(32, 10));
   geo.scale(1, 1, depthScale);
   return geo;
 }
 
 function headGeometry() {
-  const geo = new THREE.SphereGeometry(0.1, 48, 36);
+  const geo = new THREE.SphereGeometry(0.1, lo(48, 14), lo(36, 10));
   const p = geo.attributes.position;
   const v = new THREE.Vector3();
   for (let i = 0; i < p.count; i++) {
@@ -90,7 +101,7 @@ function buildHead(mats) {
   head.add(skull);
 
   // Hair: upper shell of a slightly larger head.
-  const hairGeo = new THREE.SphereGeometry(0.106, 40, 20, 0, Math.PI * 2, 0, Math.PI * 0.52);
+  const hairGeo = Sphere(0.106, 40, 20, 0, Math.PI * 2, 0, Math.PI * 0.52);
   hairGeo.scale(1, 1.14, 1.1);
   const hair = mesh('Hair', hairGeo, mats.hair);
   hair.position.set(0, 0.113, -0.006);
@@ -100,17 +111,17 @@ function buildHead(mats) {
   // Eyes
   for (const s of [-1, 1]) {
     const side = s < 0 ? 'Right' : 'Left';
-    const eye = mesh(`${side}Eye`, new THREE.SphereGeometry(0.0125, 16, 12), mats.eyeWhite, false);
+    const eye = mesh(`${side}Eye`, Sphere(0.0125, 16, 12), mats.eyeWhite, false);
     eye.position.set(0.034 * s, 0.108, 0.08);
     head.add(eye);
-    const iris = mesh(`${side}Iris`, new THREE.SphereGeometry(0.0065, 12, 8), mats.iris, false);
+    const iris = mesh(`${side}Iris`, Sphere(0.0065, 12, 8), mats.iris, false);
     iris.position.set(0.034 * s, 0.108, 0.0915);
     head.add(iris);
-    const brow = mesh(`${side}Brow`, new RoundedBoxGeometry(0.034, 0.006, 0.012, 2, 0.003), mats.hair, false);
+    const brow = mesh(`${side}Brow`, RBox(0.034, 0.006, 0.012, 2, 0.003), mats.hair, false);
     brow.position.set(0.034 * s, 0.126, 0.09);
     brow.rotation.z = deg(-6 * s);
     head.add(brow);
-    const ear = mesh(`${side}Ear`, new THREE.SphereGeometry(0.022, 16, 12), mats.skin);
+    const ear = mesh(`${side}Ear`, Sphere(0.022, 16, 12), mats.skin);
     ear.scale.set(0.4, 1.15, 0.75);
     ear.position.set(0.1 * s, 0.1, -0.005);
     head.add(ear);
@@ -124,13 +135,13 @@ function buildHead(mats) {
   nose.position.set(0, 0.088, 0.095);
   nose.rotation.x = deg(-18);
   head.add(nose);
-  const nostrils = mesh('NoseTip', new THREE.SphereGeometry(0.012, 16, 10), mats.skin);
+  const nostrils = mesh('NoseTip', Sphere(0.012, 16, 10), mats.skin);
   nostrils.scale.set(1.3, 0.8, 0.9);
   nostrils.position.set(0, 0.07, 0.1);
   head.add(nostrils);
 
   // Mouth
-  const lipsGeo = new THREE.CapsuleGeometry(0.0055, 0.03, 4, 12);
+  const lipsGeo = Capsule(0.0055, 0.03, 4, 12);
   lipsGeo.rotateZ(Math.PI / 2);
   const lips = mesh('Lips', lipsGeo, mats.lips, false);
   lips.scale.set(1, 1, 0.6);
@@ -143,19 +154,19 @@ function buildHead(mats) {
 function buildHand(mats, s) {
   const side = s < 0 ? 'Right' : 'Left';
   const hand = joint(`${side}Hand`, 0, -0.255, 0);
-  const palm = mesh(`${side}Palm`, new RoundedBoxGeometry(0.03, 0.09, 0.08, 3, 0.012), mats.glove);
+  const palm = mesh(`${side}Palm`, RBox(0.03, 0.09, 0.08, 3, 0.012), mats.glove);
   palm.position.y = -0.045;
   hand.add(palm);
   // Four fingers, slightly curled.
   for (let i = 0; i < 4; i++) {
     const len = [0.07, 0.078, 0.074, 0.06][i];
-    const f = mesh(`${side}Finger${i}`, new THREE.CapsuleGeometry(0.0085, len - 0.017, 4, 8), mats.glove);
+    const f = mesh(`${side}Finger${i}`, Capsule(0.0085, len - 0.017, 4, 8), mats.glove);
     f.position.set(0, -0.09 - len / 2 + 0.008, 0.028 - i * 0.019);
     f.rotation.x = deg(-8);
     f.rotation.z = deg(10 * s);
     hand.add(f);
   }
-  const thumb = mesh(`${side}Thumb`, new THREE.CapsuleGeometry(0.01, 0.045, 4, 8), mats.glove);
+  const thumb = mesh(`${side}Thumb`, Capsule(0.01, 0.045, 4, 8), mats.glove);
   thumb.position.set(0.012 * s * -1, -0.05, 0.048);
   thumb.rotation.set(deg(35), 0, deg(-20 * s));
   hand.add(thumb);
@@ -170,7 +181,7 @@ function buildArm(mats, s) {
   arm.rotation.z = deg(8 * s); // relaxed A-pose
 
   // Deltoid cap
-  const delt = mesh(`${side}Deltoid`, new THREE.SphereGeometry(0.056, 24, 16), mats.shirt);
+  const delt = mesh(`${side}Deltoid`, Sphere(0.056, 24, 16), mats.shirt);
   delt.scale.set(0.95, 0.85, 1.0);
   delt.position.set(-0.008 * s, -0.005, 0);
   arm.add(delt);
@@ -180,7 +191,7 @@ function buildArm(mats, s) {
   arm.add(fore);
   fore.rotation.x = deg(-10);
   // Rolled sleeve + bare forearm
-  const sleeve = mesh(`${side}Cuff`, new THREE.TorusGeometry(0.043, 0.012, 10, 24), mats.shirt);
+  const sleeve = mesh(`${side}Cuff`, Torus(0.043, 0.012, 10, 24), mats.shirt);
   sleeve.rotation.x = Math.PI / 2;
   sleeve.position.y = -0.03;
   fore.add(sleeve);
@@ -199,14 +210,14 @@ function buildLeg(mats, s) {
   const up = joint(`${side}UpLeg`, 0.095 * s, -0.04, 0);
   up.add(mesh(`${side}Thigh`, limbGeometry(0.44, [0.085, 0.088, 0.078, 0.066, 0.055], 1.05), mats.pants));
   // Cargo pocket on thigh
-  const pocket = mesh(`${side}CargoPocket`, new RoundedBoxGeometry(0.03, 0.12, 0.11, 2, 0.01), mats.pants);
+  const pocket = mesh(`${side}CargoPocket`, RBox(0.03, 0.12, 0.11, 2, 0.01), mats.pants);
   pocket.position.set(0.075 * s, -0.22, 0);
   up.add(pocket);
 
   const leg = joint(`${side}Leg`, 0, -0.44, 0);
   up.add(leg);
   leg.add(mesh(`${side}Shin`, limbGeometry(0.43, [0.056, 0.06, 0.055, 0.045, 0.042], 1.05), mats.pants));
-  const pad = mesh(`${side}KneePad`, new RoundedBoxGeometry(0.09, 0.11, 0.04, 3, 0.015), mats.strap);
+  const pad = mesh(`${side}KneePad`, RBox(0.09, 0.11, 0.04, 3, 0.015), mats.strap);
   pad.position.set(0, -0.02, 0.055);
   leg.add(pad);
 
@@ -215,10 +226,10 @@ function buildLeg(mats, s) {
   const shaft = mesh(`${side}BootShaft`, limbGeometry(0.1, [0.05, 0.052, 0.054], 1.05), mats.boot);
   shaft.position.y = 0.06;
   foot.add(shaft);
-  const boot = mesh(`${side}Boot`, new RoundedBoxGeometry(0.1, 0.085, 0.26, 4, 0.03), mats.boot);
+  const boot = mesh(`${side}Boot`, RBox(0.1, 0.085, 0.26, 4, 0.03), mats.boot);
   boot.position.set(0, -0.035, 0.045);
   foot.add(boot);
-  const sole = mesh(`${side}Sole`, new RoundedBoxGeometry(0.105, 0.022, 0.27, 2, 0.008), mats.sole);
+  const sole = mesh(`${side}Sole`, RBox(0.105, 0.022, 0.27, 2, 0.008), mats.sole);
   sole.position.set(0, -0.075, 0.045);
   foot.add(sole);
   return up;
@@ -233,33 +244,33 @@ function buildTorso(mats) {
   chest.add(mesh('ChestMesh', torsoGeometry(0.25, [0.155, 0.17, 0.18, 0.17, 0.1], 0.66), mats.shirt));
 
   // Plate-carrier vest
-  const vestFront = mesh('VestFront', new RoundedBoxGeometry(0.3, 0.3, 0.06, 4, 0.02), mats.vest);
+  const vestFront = mesh('VestFront', RBox(0.3, 0.3, 0.06, 4, 0.02), mats.vest);
   vestFront.position.set(0, 0.07, 0.095);
   chest.add(vestFront);
-  const vestBack = mesh('VestBack', new RoundedBoxGeometry(0.3, 0.32, 0.05, 4, 0.02), mats.vest);
+  const vestBack = mesh('VestBack', RBox(0.3, 0.32, 0.05, 4, 0.02), mats.vest);
   vestBack.position.set(0, 0.07, -0.1);
   chest.add(vestBack);
   for (const s of [-1, 1]) {
-    const strap = mesh('VestStrap', new RoundedBoxGeometry(0.05, 0.03, 0.22, 2, 0.01), mats.vest);
+    const strap = mesh('VestStrap', RBox(0.05, 0.03, 0.22, 2, 0.01), mats.vest);
     strap.position.set(0.1 * s, 0.235, 0);
     chest.add(strap);
-    const side = mesh('VestSide', new RoundedBoxGeometry(0.03, 0.14, 0.18, 2, 0.01), mats.vest);
+    const side = mesh('VestSide', RBox(0.03, 0.14, 0.18, 2, 0.01), mats.vest);
     side.position.set(0.155 * s, 0.02, 0);
     chest.add(side);
   }
   // Magazine pouches
   for (let i = 0; i < 3; i++) {
-    const p = mesh(`MagPouch${i}`, new RoundedBoxGeometry(0.075, 0.1, 0.04, 3, 0.01), mats.pouch);
+    const p = mesh(`MagPouch${i}`, RBox(0.075, 0.1, 0.04, 3, 0.01), mats.pouch);
     p.position.set((i - 1) * 0.085, -0.01, 0.14);
     chest.add(p);
-    const flap = mesh(`MagFlap${i}`, new RoundedBoxGeometry(0.077, 0.03, 0.045, 2, 0.008), mats.strap);
+    const flap = mesh(`MagFlap${i}`, RBox(0.077, 0.03, 0.045, 2, 0.008), mats.strap);
     flap.position.set((i - 1) * 0.085, 0.04, 0.142);
     chest.add(flap);
   }
-  const radio = mesh('RadioPouch', new RoundedBoxGeometry(0.06, 0.08, 0.04, 3, 0.01), mats.pouch);
+  const radio = mesh('RadioPouch', RBox(0.06, 0.08, 0.04, 3, 0.01), mats.pouch);
   radio.position.set(0.095, 0.13, 0.135);
   chest.add(radio);
-  const antenna = mesh('Antenna', new THREE.CylinderGeometry(0.003, 0.004, 0.14, 6), mats.strap);
+  const antenna = mesh('Antenna', Cylinder(0.003, 0.004, 0.14, 6), mats.strap);
   antenna.position.set(0.115, 0.21, 0.135);
   chest.add(antenna);
 
@@ -275,15 +286,15 @@ function buildHips(mats) {
   pelvis.position.y = -0.08;
   hips.add(pelvis);
   // Belt + buckle + holster
-  const belt = mesh('Belt', new THREE.TorusGeometry(0.155, 0.018, 8, 40), mats.strap);
+  const belt = mesh('Belt', Torus(0.155, 0.018, 8, 40), mats.strap);
   belt.rotation.x = Math.PI / 2;
   belt.scale.set(1, 0.72, 1.4);
   belt.position.y = 0.03;
   hips.add(belt);
-  const buckle = mesh('Buckle', new RoundedBoxGeometry(0.05, 0.035, 0.012, 2, 0.004), mats.buckle);
+  const buckle = mesh('Buckle', RBox(0.05, 0.035, 0.012, 2, 0.004), mats.buckle);
   buckle.position.set(0, 0.03, 0.115);
   hips.add(buckle);
-  const holster = mesh('Holster', new RoundedBoxGeometry(0.045, 0.16, 0.08, 3, 0.012), mats.strap);
+  const holster = mesh('Holster', RBox(0.045, 0.16, 0.08, 3, 0.012), mats.strap);
   holster.position.set(-0.17, -0.06, 0.01);
   hips.add(holster);
 
@@ -387,13 +398,41 @@ export function createCharacterAnimations() {
       return track;
     }),
   ]);
-  return [idle, walk, run, aim, withAim('WalkAim', walk), withAim('RunAim', run)];
+  // Freefall: arms spread, knees bent back. The game tilts the body flat.
+  const skydive = new THREE.AnimationClip('Skydive', 1, [
+    hold('LeftArm', [-10, 0, 80], [-14, 0, 84]),
+    hold('RightArm', [-10, 0, -80], [-14, 0, -84]),
+    hold('LeftForeArm', [-35, 0, 0], [-40, 0, 0]),
+    hold('RightForeArm', [-35, 0, 0], [-40, 0, 0]),
+    hold('LeftUpLeg', [12, 0, 6], [16, 0, 6]),
+    hold('RightUpLeg', [12, 0, -6], [16, 0, -6]),
+    hold('LeftLeg', [45, 0, 0], [50, 0, 0]),
+    hold('RightLeg', [45, 0, 0], [50, 0, 0]),
+    hold('Head', [-30, 0, 0], [-30, 0, 0]),
+  ]);
+  // Under the canopy: both hands up on the steering lines, legs hanging.
+  const parachute = new THREE.AnimationClip('Parachute', 2, [
+    hold('LeftArm', [-15, 0, 155], [-18, 0, 152]),
+    hold('RightArm', [-15, 0, -155], [-18, 0, -152]),
+    hold('LeftForeArm', [-25, 0, 0], [-25, 0, 0]),
+    hold('RightForeArm', [-25, 0, 0], [-25, 0, 0]),
+    hold('LeftUpLeg', [-8, 0, 3], [-4, 0, 3]),
+    hold('RightUpLeg', [-4, 0, -3], [-8, 0, -3]),
+    hold('LeftLeg', [12, 0, 0], [16, 0, 0]),
+    hold('RightLeg', [16, 0, 0], [12, 0, 0]),
+  ]);
+  return [idle, walk, run, aim, withAim('WalkAim', walk), withAim('RunAim', run), skydive, parachute];
 }
 
-export function createCharacter(mats) {
-  const root = new THREE.Group();
-  root.name = 'Soldier';
-  root.add(buildHips(mats));
-  root.animations = createCharacterAnimations();
-  return root;
+export function createCharacter(mats, { lowDetail = false } = {}) {
+  LOW = lowDetail;
+  try {
+    const root = new THREE.Group();
+    root.name = 'Soldier';
+    root.add(buildHips(mats));
+    root.animations = createCharacterAnimations();
+    return root;
+  } finally {
+    LOW = false;
+  }
 }

@@ -109,7 +109,7 @@ class Batcher {
 // Merges all meshes under a building/prop group into one mesh per material,
 // keeping the group (name, transform, userData) so the game can still find it.
 // Small or walk-through parts that should not block the player.
-const NO_COLLIDE = /^(Door|Rung|LadderSide|Brace|Edge|Band|Sill|Flare|Rib|Gable)/;
+const NO_COLLIDE = /^(Door|Rung|LadderSide|Brace|Edge|Band|Sill|Flare|Rib|Gable|Ceiling)/;
 
 function flatten(group) {
   group.updateMatrixWorld(true);

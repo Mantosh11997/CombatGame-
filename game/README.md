@@ -1,9 +1,16 @@
 # CombatGame (Flutter)
 
-A third-person 3D shooter built with Flutter and
-[flutter_scene](https://pub.dev/packages/flutter_scene). You play a soldier on
-Training Island, a map made in the repo's Three.js asset workshop, with five
-guns and a firing range of practice targets.
+A third-person 3D battle royale built with Flutter and
+[flutter_scene](https://pub.dev/packages/flutter_scene).
+
+**Start** puts you on a plane with 49 AI players over Training Island. Jump
+when you like, skydive, open your parachute, land, find guns, medkits and
+ammo, and survive while the safe zone shrinks. The last one standing wins
+("BOOYAH!"). The AI players follow the same rules as you: they ride the same
+plane, choose where to drop, loot, heal, fight each other and you, and run
+from the zone.
+
+**Training** is a firing range with every gun and practice targets.
 
 ## Run it
 
@@ -23,25 +30,55 @@ iOS (`Info.plist`), so release builds need no flag. The web needs nothing.
 
 | Action | Touch | Keyboard / mouse |
 | --- | --- | --- |
+| Jump from the plane / open parachute | Big button in the middle | Space |
 | Move | Left joystick (push to the edge to sprint) | WASD (Shift to sprint) |
 | Look | Drag on the right half of the screen | Drag on the right half |
 | Fire | Big red button (drag on it to aim while firing) | F |
 | Aim down sights | Aim button | Q or scroll wheel |
 | Jump | Jump button | Space |
 | Reload | Reload button | R |
+| Use medkit | Medkit button (shows how many you carry) | H |
+| Swap for the gun on the ground | "Swap for ..." button | E |
 | Switch gun | Tap a slot at the top | 1-5 |
+
+Walking over a gun picks it up when you have a free slot (two slots in a
+match); medkits (up to 5) and ammo are picked up automatically.
+
+## The match
+
+- **Plane:** flies straight across the island on a random line. The minimap
+  shows its path. Everyone still aboard is dropped at the end of the line.
+- **Drop:** freefall at ~28 m/s, steering with the stick. The parachute can
+  be opened below 95 m and opens by itself at 38 m.
+- **Loot:** ~110 items spawn on house floors, in the warehouse and on open
+  ground. Eliminated players drop everything they carried.
+- **Safe zone:** appears when the plane has passed. Five phases: wait, then
+  shrink (to 85 m, 50 m, 26 m, 10 m and 0 m radius). Outside the circle you
+  lose 2 to 15 health per second, depending on the phase.
+- **Damage:** the same for everyone. Headshots do double damage. Health is
+  100. A medkit heals 75 over 2.5 s.
+- **AI:** each bot has a skill level (reaction time, turn speed, accuracy).
+  Bots only see enemies in front of them within range and with a clear line
+  of sight. They hear gunfire within 90 m, and they never shoot at players
+  still in the air.
 
 ## How it fits together
 
 ```
-lib/main.dart               app shell, loading screen, SceneView + HUD
-lib/game/game.dart          Game: loads the scene, camera, shooting, targets
-lib/game/player.dart        movement, gravity, collision, animation blending
-lib/game/collision_world.dart  terrain heightfield + box/circle colliders, raycasts
-lib/game/weapons.dart       gun stats, ammo, reload, fire timing
-lib/game/targets.dart       practice dummies (hit, fall, respawn)
-lib/game/effects.dart       tracers, muzzle flash, impact puffs
-lib/ui/hud.dart             joystick, buttons, crosshair, ammo and stats
+lib/main.dart                      menu, loading, SceneView + HUD
+lib/game/game.dart                 Game: scene, assets, camera, player input, shooting
+lib/game/battle_royale.dart        the match: plane, bots, zone, loot, eliminations
+lib/game/bot_brain.dart            AI decisions (drop, loot, fight, heal, zone)
+lib/game/combatant.dart            a soldier: health, guns, medkits, hit box
+lib/game/character_controller.dart movement for everyone: plane, freefall,
+                                   parachute, walking, death; animation blending
+lib/game/zone.dart                 shrinking safe zone (pure logic)
+lib/game/loot.dart                 loot table and placement
+lib/game/collision_world.dart      terrain heightfield + colliders, raycasts
+lib/game/weapons.dart              gun stats, ammo, reload, fire timing
+lib/game/targets.dart              training dummies
+lib/game/effects.dart              tracers, muzzle flash, impacts
+lib/ui/hud.dart, lib/ui/minimap.dart  controls, readouts, minimap, results
 ```
 
 - **Assets.** The `.glb` files in `assets/models/` come from the Three.js
@@ -54,6 +91,10 @@ lib/ui/hud.dart             joystick, buttons, crosshair, ammo and stats
   game moves the player and casts bullets against that data instead of
   against rendered triangles, which keeps it cheap on phones. Box tops count
   as floors, so stairs and upper storeys are walkable.
+- **50 soldiers on a phone.** Bots use a low-detail soldier (6.7k
+  triangles, one vertex-coloured mesh per joint, about 17 draw calls) in 4
+  outfits, and single-mesh guns. Soldiers further than 160 m and loot
+  further than 45 m are hidden. The player keeps the full-detail model.
 - **Coordinates.** flutter_scene imports glTF with Z negated. The collision
   loader negates Z (and yaw) to match, and `test/collision_world_test.dart`
   checks this against spawn positions taken from the imported scene.
@@ -61,11 +102,16 @@ lib/ui/hud.dart             joystick, buttons, crosshair, ammo and stats
 ## Tests
 
 ```bash
-flutter test      # collision and weapon logic
+flutter test      # collision, weapons, safe zone, loot placement
 flutter analyze
 ```
 
+On the web, two URL flags help test a whole match quickly:
+`?mode=br&speed=30&autopilot=1` skips the menu, runs 30 simulation steps per
+frame, and lets an AI play for you. The match log (drops, every elimination,
+the winner) is printed to the browser console.
+
 ## Not built yet
 
-Enemies or bots, player health and damage, grenades, the shrinking safe
-zone, loot pickups, vehicles, sound and multiplayer.
+Grenades (the model exists), armour and helmets, vehicles, sound, squads and
+online multiplayer.

@@ -155,7 +155,7 @@ for (const [key, asset] of Object.entries(ASSETS)) {
 }
 
 const animButtons = document.getElementById('anim-buttons');
-for (const name of ['Idle', 'Walk', 'Run', 'Aim', 'WalkAim', 'RunAim']) {
+for (const name of ['Idle', 'Walk', 'Run', 'Aim', 'WalkAim', 'RunAim', 'Skydive', 'Parachute']) {
   const b = document.createElement('button');
   b.textContent = name;
   b.onclick = () => playClip(name);

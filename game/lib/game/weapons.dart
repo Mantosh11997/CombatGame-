@@ -39,6 +39,9 @@ class WeaponSpec {
   final double zoom;
 
   String get asset => 'assets/models/$id.glb';
+
+  /// Single-mesh low-detail model, for bots and loot on the ground.
+  String get lowAsset => 'assets/models/${id}_lod.glb';
 }
 
 const weaponSpecs = <WeaponSpec>[

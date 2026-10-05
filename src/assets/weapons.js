@@ -10,6 +10,20 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 const deg = THREE.MathUtils.degToRad;
 
+// Low detail for guns seen at a distance (bots, loot): plain boxes, coarse
+// tubes, no rail teeth. Toggled by withLowDetail().
+let LOW = false;
+export function withLowDetail(build) {
+  return (mats) => {
+    LOW = true;
+    try {
+      return build(mats);
+    } finally {
+      LOW = false;
+    }
+  };
+}
+
 class GunBuilder {
   constructor(name, mats) {
     this.mats = mats;
@@ -30,12 +44,13 @@ class GunBuilder {
 
   box(name, w, h, d, material, x, y, z, radius = 0.004, rx = 0) {
     const r = Math.min(radius, w / 2 - 1e-4, h / 2 - 1e-4, d / 2 - 1e-4);
-    return this.add(name, new RoundedBoxGeometry(w, h, d, 2, r), material, x, y, z, rx);
+    const geo = LOW ? new THREE.BoxGeometry(w, h, d) : new RoundedBoxGeometry(w, h, d, 2, r);
+    return this.add(name, geo, material, x, y, z, rx);
   }
 
   // Cylinder lying along Z.
   tube(name, radius, length, material, x, y, z, radiusEnd = radius, segments = 20) {
-    const geo = new THREE.CylinderGeometry(radiusEnd, radius, length, segments);
+    const geo = new THREE.CylinderGeometry(radiusEnd, radius, length, LOW ? 7 : segments);
     geo.rotateX(Math.PI / 2);
     return this.add(name, geo, material, x, y, z + length / 2);
   }
@@ -49,7 +64,7 @@ class GunBuilder {
   }
 
   grip(material, angle = 18, h = 0.11) {
-    const geo = new RoundedBoxGeometry(0.03, h, 0.045, 3, 0.012);
+    const geo = LOW ? new THREE.BoxGeometry(0.03, h, 0.045) : new RoundedBoxGeometry(0.03, h, 0.045, 3, 0.012);
     geo.translate(0, -h / 2, 0);
     return this.add('Grip', geo, material, 0, 0, 0, deg(-angle));
   }
@@ -99,6 +114,10 @@ class GunBuilder {
 
   // Picatinny rail with teeth.
   rail(y, z, length) {
+    if (LOW) {
+      this.box('Rail', 0.022, 0.01, length, this.mats.darkMetal, 0, y, z + length / 2);
+      return;
+    }
     this.box('Rail', 0.022, 0.008, length, this.mats.darkMetal, 0, y, z + length / 2, 0.002);
     const n = Math.floor(length / 0.01);
     const teeth = [];

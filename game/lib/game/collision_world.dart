@@ -7,7 +7,17 @@ import 'package:vector_math/vector_math.dart' as vm;
 class BoxCollider {
   BoxCollider(this.center, this.halfExtents, this.yaw)
     : _cos = math.cos(yaw),
-      _sin = math.sin(yaw);
+      _sin = math.sin(yaw) {
+    final ex = (halfExtents.x * _cos).abs() + (halfExtents.z * _sin).abs();
+    final ez = (halfExtents.x * _sin).abs() + (halfExtents.z * _cos).abs();
+    minX = center.x - ex;
+    maxX = center.x + ex;
+    minZ = center.z - ez;
+    maxZ = center.z + ez;
+  }
+
+  /// World-space XZ footprint (axis-aligned bounds of the rotated box).
+  late final double minX, maxX, minZ, maxZ;
 
   final vm.Vector3 center;
   final vm.Vector3 halfExtents;
@@ -63,7 +73,42 @@ class CollisionWorld {
     required this.boxes,
     required this.circles,
   }) : _segments = segments,
-       _cell = size / segments;
+       _cell = size / segments {
+    _buildGrid();
+  }
+
+  // Uniform grid over the map so point queries (movement, ground height)
+  // only test nearby colliders. Each collider is registered in every cell its
+  // footprint, grown by [_gridMargin], overlaps.
+  static const double _gridCell = 8;
+  static const double _gridMargin = 1.5;
+  late final int _gridSize = (size / _gridCell).ceil() + 2;
+  late final List<List<BoxCollider>> _boxGrid;
+  late final List<List<CircleCollider>> _circleGrid;
+
+  int _cellIndex(int cx, int cz) => cz * _gridSize + cx;
+  int _cellCoord(double v) => ((v + size / 2) / _gridCell).floor().clamp(0, _gridSize - 1);
+
+  void _buildGrid() {
+    _boxGrid = List.generate(_gridSize * _gridSize, (_) => <BoxCollider>[]);
+    _circleGrid = List.generate(_gridSize * _gridSize, (_) => <CircleCollider>[]);
+    void insert<T>(List<List<T>> grid, T item, double x0, double z0, double x1, double z1) {
+      for (var cz = _cellCoord(z0 - _gridMargin); cz <= _cellCoord(z1 + _gridMargin); cz++) {
+        for (var cx = _cellCoord(x0 - _gridMargin); cx <= _cellCoord(x1 + _gridMargin); cx++) {
+          grid[_cellIndex(cx, cz)].add(item);
+        }
+      }
+    }
+    for (final b in boxes) {
+      insert(_boxGrid, b, b.minX, b.minZ, b.maxX, b.maxZ);
+    }
+    for (final c in circles) {
+      insert(_circleGrid, c, c.x - c.radius, c.z - c.radius, c.x + c.radius, c.z + c.radius);
+    }
+  }
+
+  List<BoxCollider> _boxesAt(double x, double z) => _boxGrid[_cellIndex(_cellCoord(x), _cellCoord(z))];
+  List<CircleCollider> _circlesAt(double x, double z) => _circleGrid[_cellIndex(_cellCoord(x), _cellCoord(z))];
 
   factory CollisionWorld.fromJson(Map<String, dynamic> json) {
     final hf = json['heightfield'] as Map<String, dynamic>;
@@ -105,6 +150,9 @@ class CollisionWorld {
   final List<BoxCollider> boxes;
   final List<CircleCollider> circles;
   final int _segments;
+
+  /// Heightfield cells per side.
+  int get segments => _segments;
   /// Terrain vertex heights, row-major from glTF (-size/2, -size/2).
   final Float32List heights;
   final double _cell;
@@ -141,7 +189,7 @@ class CollisionWorld {
   double groundHeight(double x, double z, double feetY) {
     var ground = terrainHeight(x, z);
     final reach = feetY + stepHeight;
-    for (final b in boxes) {
+    for (final b in _boxesAt(x, z)) {
       final top = b.top;
       if (top > ground && top <= reach && b.containsXZ(x, z)) ground = top;
     }
@@ -182,7 +230,7 @@ class CollisionWorld {
   ) {
     final lo = feetY + stepHeight, hi = feetY + height;
     for (var iteration = 0; iteration < 3; iteration++) {
-      for (final b in boxes) {
+      for (final b in _boxesAt(px, pz)) {
         if (b.top <= lo || b.bottom >= hi) continue;
         final dx = px - b.center.x, dz = pz - b.center.z;
         final lx = b.localX(dx, dz), lz = b.localZ(dx, dz);
@@ -211,7 +259,7 @@ class CollisionWorld {
         px += b.worldX(nx, nz);
         pz += b.worldZ(nx, nz);
       }
-      for (final c in circles) {
+      for (final c in _circlesAt(px, pz)) {
         final dx = px - c.x, dz = pz - c.z;
         final min = c.radius + radius;
         final d2 = dx * dx + dz * dz;
@@ -228,8 +276,12 @@ class CollisionWorld {
   RayHit? raycast(vm.Vector3 origin, vm.Vector3 dir, double maxDistance) {
     var best = maxDistance;
     vm.Vector3? bestNormal;
+    final end = origin + dir * maxDistance;
+    final rx0 = math.min(origin.x, end.x), rx1 = math.max(origin.x, end.x);
+    final rz0 = math.min(origin.z, end.z), rz1 = math.max(origin.z, end.z);
 
     for (final b in boxes) {
+      if (b.maxX < rx0 || b.minX > rx1 || b.maxZ < rz0 || b.minZ > rz1) continue;
       final hit = _rayBox(origin, dir, b, best);
       if (hit != null) {
         best = hit.$1;
