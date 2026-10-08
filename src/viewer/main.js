@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { ASSETS, buildAsset, createMaterials } from '../assets/index.js';
 
 const stage = document.getElementById('stage');
@@ -186,16 +187,36 @@ function resize() {
 }
 new ResizeObserver(resize).observe(stage);
 
+let frozen = false;
 renderer.setAnimationLoop(() => {
   const dt = clock.getDelta();
-  mixer?.update(dt);
+  if (!frozen) mixer?.update(dt);
   alignWeapon();
   controls.update();
   renderer.render(scene, camera);
 });
 
+// ?glb=path/to/model.glb previews an external model (with its animations).
+const externalGlb = new URLSearchParams(location.search).get('glb');
+if (externalGlb) {
+  new GLTFLoader().load(externalGlb, (gltf) => {
+    ASSETS.__external = { label: 'External', category: 'External', build: () => gltf.scene };
+    gltf.scene.animations = gltf.animations;
+    gltf.scene.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+    show('__external');
+    const buttons = document.getElementById('anim-buttons');
+    buttons.innerHTML = '';
+    for (const clip of gltf.animations) {
+      const b = document.createElement('button');
+      b.textContent = clip.name;
+      b.onclick = () => playClip(clip.name);
+      buttons.appendChild(b);
+    }
+    playClip(gltf.animations.find((a) => a.name === 'Idle')?.name ?? gltf.animations[0]?.name);
+  });
+}
 const initial = new URLSearchParams(location.search).get('asset');
-show(ASSETS[initial] ? initial : 'soldier');
+if (!externalGlb) show(ASSETS[initial] ? initial : 'soldier');
 const initialWeapon = new URLSearchParams(location.search).get('equip');
 if (initialWeapon && ASSETS[initialWeapon]) {
   equipSelect.value = initialWeapon;
@@ -204,4 +225,16 @@ if (initialWeapon && ASSETS[initialWeapon]) {
 const initialAnim = new URLSearchParams(location.search).get('anim');
 if (initialAnim) playClip(initialAnim);
 // Expose for debugging and automated screenshots.
-window.workshop = { scene, camera, controls, show, equip, playClip };
+window.workshop = {
+  scene, camera, controls, show, equip, playClip,
+  // Frame-exact posing for recordings: stop the clock and set the clip time.
+  pose(name, time) {
+    frozen = true;
+    playClip(name);
+    mixer.setTime(time);
+    alignWeapon();
+    controls.update();
+    renderer.render(scene, camera);
+  },
+  duration: (name) => THREE.AnimationClip.findByName(current.animations, name).duration,
+};

@@ -4,6 +4,7 @@ import { WEAPON_BUILDERS, withLowDetail } from './weapons.js';
 import { createMap } from './map.js';
 import { createAirplane, createParachute, createMedkit, createAmmoBox } from './vehicles.js';
 import { bakeAll, bakeByJoint, bakedMaterial } from './bake.js';
+import { createHuman, OUTFITS as HUMAN_OUTFITS } from './human/human.js';
 
 // Bot outfits: [shirt, pants, vest, skin, hair].
 const OUTFITS = [
@@ -36,7 +37,10 @@ function lodGun(build) {
 
 // Every asset the game needs. Keys become GLB file names in game/assets/models/.
 export const ASSETS = {
-  soldier: { label: 'Soldier', category: 'Character', build: createCharacter },
+  soldier_v2: { label: 'Soldier (realistic)', category: 'Character', build: () => createHuman() },
+  soldier_v2_bot: { label: 'Bot (realistic, low)', category: 'Character', build: () => createHuman({ outfit: HUMAN_OUTFITS.desert, lowDetail: true }) },
+  soldier_v2_urban: { label: 'Soldier (urban)', category: 'Character', build: () => createHuman({ outfit: HUMAN_OUTFITS.urban }) },
+  soldier: { label: 'Soldier (old)', category: 'Character', build: createCharacter },
   ...Object.fromEntries(OUTFITS.map((_, i) => [
     `soldier_bot_${i}`, { label: `Bot Soldier ${i + 1}`, category: 'Character', build: () => createBotSoldier(i) },
   ])),
